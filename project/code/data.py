@@ -72,10 +72,9 @@ class MinMaxPaddedScaler(MinMaxScaler):
         return X_transformed
 
 
-def generate_test_data(aggregate=True, flatten=True):
+def generate_test_data():
 
     env_seed = 1339
-    env = gym.make("LunarLander-v2")
 
     df = pandas.read_pickle("../../results_stochastic/MAP-ELITES_LUNDAR-LANDER_221118-031234/archive_1000.pkl")
 
@@ -95,33 +94,39 @@ def generate_test_data(aggregate=True, flatten=True):
 
     states_list = []
 
+    env = gym.make("LunarLander-v2")
+
     for solution in tqdm(solutions):
         result = simulate(env, solution, env_seed)
         states_list.append(result[3])
 
     env.close()
 
-    max_length = max([states.shape[0] for states in states_list])
+    states_array = np.array(states_list, dtype=object)
 
-    states_array = np.vstack(states_list)
+    # max_length = max([states.shape[0] for states in states_list])
 
-    min_values = np.min(states_array, axis=0)
-    max_values = np.max(states_array, axis=0)
+    # states_array = np.vstack(states_list)
 
-    states_array_scaled = []
+    # min_values = np.min(states_array, axis=0)
+    # max_values = np.max(states_array, axis=0)
 
-    for states in states_list:
-        if aggregate:
-            states_array_scaled.append(states.mean(axis=0))
-        else:
-            states = (states - min_values) / (max_values - min_values)
-            states_array_scaled.append(np.pad(states, pad_width=[(0, max_length - len(states)), (0, 0)]))
+    # states_array_scaled = []
+    #
+    # for states in states_list:
+    #     if aggregate:
+    #         states_array_scaled.append(states.mean(axis=0))
+    #     else:
+    #         # states = (states - min_values) / (max_values - min_values)
+    #         # states_array_scaled.append(np.pad(states, pad_width=[(0, max_length - len(states)), (0, 0)]))
+    #         states_array_scaled.append(states)
+    #     states_array_scaled.append(states)
+    #
+    # states_array_scaled = np.array(states_array_scaled, dtype=object)
 
-    states_array_scaled = np.array(states_array_scaled)
+    # if aggregate is False and flatten is True:
+    #     states_array_scaled = states_array_scaled.reshape(states_array_scaled.shape[0], -1)
 
-    if aggregate is False and flatten is True:
-        states_array_scaled = states_array_scaled.reshape(states_array_scaled.shape[0], -1)
-
-    return states_array_scaled
+    return states_array
 
     # return solutions, objectives, states_list, states_array_scaled

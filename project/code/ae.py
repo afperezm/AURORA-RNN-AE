@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from project.code.data import generate_test_data, VecDataset
+from project.code.data import generate_test_data, VecDataset, MinMaxPaddedScaler
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
@@ -113,7 +113,9 @@ def main():
     seed = PARAMS.seed
     ckpt_dir = PARAMS.checkpoint_dir
 
-    states_array_scaled = generate_test_data(aggregate=False, flatten=True)
+    scaler = MinMaxPaddedScaler(averaging=False, stacking=True)
+    states_array = generate_test_data()
+    states_array_scaled = scaler.fit_transform(states_array)
 
     torch.manual_seed(seed)
 
