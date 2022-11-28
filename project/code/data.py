@@ -19,11 +19,24 @@ class VecDataset(Dataset):
         return self.data[idx, :]
 
 
+class VecSeqDataset(Dataset):
+    def __init__(self, data, lengths):
+        self.data = torch.tensor(data).float()
+        self.lengths = torch.tensor(lengths).int()
+
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __getitem__(self, idx):
+        return self.data[idx, :], self.lengths[idx]
+
+
 def generate_test_data(aggregate=True, flatten=True):
 
     env_seed = 1339
 
     env = gym.make("LunarLander-v2")
+
 
     df = pandas.read_pickle("../../results_stochastic/MAP-ELITES_LUNDAR-LANDER_221118-031234/archive_1000.pkl")
 
