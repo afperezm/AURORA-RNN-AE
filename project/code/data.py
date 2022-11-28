@@ -2,10 +2,13 @@ import gym
 import numpy as np
 import pandas
 import torch
+from sklearn.preprocessing import MinMaxScaler
 
 from project.code.lunar_lander_map_elites_complex_model import simulate
 from torch.utils.data import Dataset
 from tqdm import tqdm
+
+MAX_LENGTH = 1000
 
 
 class VecDataset(Dataset):
@@ -31,12 +34,48 @@ class VecSeqDataset(Dataset):
         return self.data[idx, :], self.lengths[idx]
 
 
+class MinMaxPaddedScaler(MinMaxScaler):
+
+    def __init__(self, averaging=False, stacking=False, **kwargs):
+        super().__init__(**kwargs)
+        self.averaging = averaging
+        self.stacking = stacking
+
+    def fit(self, X, y=None):
+
+        if self.averaging:
+            X_aggregated = [x.mean(axis=0) for x in X]
+        else:
+            X_aggregated = np.vstack(X)
+
+        return super().fit(X_aggregated, y)
+
+    def transform(self, X):
+
+        if self.averaging:
+            X_aggregated = [x.mean(axis=0) for x in X]
+            X_transformed = super().transform(X_aggregated)
+        else:
+            X_aggregated = np.vstack(X)
+            X_transformed = super().transform(X_aggregated)
+
+            lengths_sum = np.cumsum([0] + [x.shape[0] for x in X])
+
+            X_transformed = [X_transformed[lengths_sum[i]:lengths_sum[i + 1], :] for i in range(len(lengths_sum) - 1)]
+            X_transformed = [np.pad(x, pad_width=[(0, MAX_LENGTH - len(x)), (0, 0)]) for x in X_transformed]
+
+            X_transformed = np.array(X_transformed)
+
+            if self.stacking:
+                X_transformed = np.reshape(X_transformed, (len(X), -1))
+
+        return X_transformed
+
+
 def generate_test_data(aggregate=True, flatten=True):
 
     env_seed = 1339
-
     env = gym.make("LunarLander-v2")
-
 
     df = pandas.read_pickle("../../results_stochastic/MAP-ELITES_LUNDAR-LANDER_221118-031234/archive_1000.pkl")
 
