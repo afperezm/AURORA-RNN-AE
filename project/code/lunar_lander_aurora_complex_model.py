@@ -18,7 +18,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from project.code.ae import VecAE, VecDataset
+from project.code.data import MinMaxPaddedScaler, MAX_LENGTH
 from project.code.networks import PolicyNet
+# from project.code.rnn import VecRnnAE, VecRnnVAE
+from project.code.rnn import VecRnnAE
 from project.code.vae import VecVAE
 
 DEVICE = None
@@ -44,7 +47,7 @@ def random_layer_params(out_features, in_features):
     return weight.flatten(), bias.flatten()
 
 
-def random_params(dim_x):
+def random_params():
 
     fc1_weight, fc1_bias = random_layer_params(NUM_HIDDEN, OBSERVATION_SIZE)
     fc2_weight, fc2_bias = random_layer_params(NUM_HIDDEN, NUM_HIDDEN)
@@ -52,9 +55,7 @@ def random_params(dim_x):
 
     x = torch.hstack([fc1_weight, fc1_bias, fc2_weight, fc2_bias, fc3_weight, fc3_bias]).numpy()
 
-    assert dim_x == x.shape[0]
-
-    return x
+    return x.shape[0], x
 
 
 def simulate(env, x, seed=None):
@@ -242,7 +243,7 @@ def main():
     # Fix initial seed
     torch.manual_seed(seed)
 
-    initial_model = random_params(4996)
+    num_params, initial_model = random_params()
 
     emitters = [
         GaussianEmitter(
@@ -254,13 +255,32 @@ def main():
         ) for s in range(seed, seed + NUM_EMITTERS)
     ]
 
-    sts_scaler = MinMaxScaler()  # States data scaler
+    # States data scaler
+    if time_mode == "AVG":
+        sts_scaler = MinMaxPaddedScaler(averaging=True)
+    elif time_mode == "STACK":
+        sts_scaler = MinMaxPaddedScaler(averaging=False, stacking=True)
+    elif time_mode == "PAD":
+        sts_scaler = MinMaxPaddedScaler(averaging=False, stacking=False)
+    else:
+        raise ValueError("Unknown `time_mode` selected.")
     bcs_scaler = MinMaxScaler()  # Behavior descriptors scaler
 
-    if encode_mode == "AE":
-        model = VecAE(OBSERVATION_SIZE, 2).to(DEVICE)
+    if time_mode == "STACK":
+        input_space = MAX_LENGTH * OBSERVATION_SIZE
     else:
-        model = VecVAE(OBSERVATION_SIZE, 2).to(DEVICE)
+        input_space = OBSERVATION_SIZE
+
+    if encode_mode == "AE":
+        model = VecAE(input_space, 2).to(DEVICE)
+    elif encode_mode == "VAE":
+        model = VecVAE(input_space, 2).to(DEVICE)
+    elif encode_mode == "RNN-AE":
+        model = VecRnnAE(input_space, input_space, 2, 1).to(DEVICE)
+    # elif encode_mode == "RNN-VAE":
+    #     model = VecRnnVAE(input_space, input_space, 2, 1).to(DEVICE)
+    else:
+        raise ValueError("Unknown `encode_mode` selected.")
 
     optimizer = Optimizer(archive, emitters)
 
@@ -275,7 +295,7 @@ def main():
         for solution in solutions:
             obj, sts = simulate(env, solution, seed=seed)
             objectives.append(obj)
-            states.append(sts.mean(axis=0))
+            states.append(sts)
         if itr in [1]:
             train_ae(model, sts_scaler, states, num_epochs, batch_size, learning_rate)
         descriptors_raw = compute_behavior_descriptors(model, sts_scaler, states, batch_size)
@@ -296,14 +316,20 @@ def main():
         if train_mode == "INC" and itr in [10, 30, 70, 150, 310, 630]:
             df = archive.as_pandas(include_metadata=True)
             # Retrieve solutions objectives and states
-            solutions = [sol for sol in df.loc[:, [f'solution_{idx}' for idx in range(4996)]].to_numpy(copy=True)]
+            solutions = [sol for sol in df.loc[:, [f'solution_{idx}' for idx in range(num_params)]].to_numpy(copy=True)]
             objectives = [obj for obj in df.loc[:, 'objective'].to_numpy(copy=True)]
             states = [meta for meta in df.loc[:, 'metadata'].to_numpy(copy=True)]
             # Retrain model and states scaler using states of solutions in the archive
             if encode_mode == "AE":
-                model = VecAE(OBSERVATION_SIZE, 2).to(DEVICE)
+                model = VecAE(input_space, 2).to(DEVICE)
+            elif encode_mode == "VAE":
+                model = VecVAE(input_space, 2).to(DEVICE)
+            elif encode_mode == "RNN-AE":
+                model = VecRnnAE(input_space, input_space, 2, 1).to(DEVICE)
+            # elif encode_mode == "RNN-VAE":
+            #     model = VecRnnVAE(input_space, input_space, 2, 1).to(DEVICE)
             else:
-                model = VecVAE(OBSERVATION_SIZE, 2).to(DEVICE)
+                raise ValueError("Unknown `encode_mode` selected.")
             train_ae(model, sts_scaler, states, num_epochs, batch_size, learning_rate)
             # Recompute behavior descriptors
             descriptors_raw = compute_behavior_descriptors(model, sts_scaler, states, batch_size)
@@ -319,8 +345,8 @@ def parse_args():
     parser = argparse.ArgumentParser("Trainer of an agent to play OpenAy Gym Lunar Lander using MAP-Elites")
     parser.add_argument("--output_dir", help="Directory to store generated archives and trained models", required=True)
     parser.add_argument("--train_mode", help="Aurora training mode", choices=["pre", "inc"], required=True)
-    parser.add_argument("--time_mode", help="Time aggregation mode", choices=["avg", "lstm"], required=True)
-    parser.add_argument("--encode_mode", help="Encoding mode", choices=["ae", "vae"], required=True)
+    parser.add_argument("--time_mode", help="Time aggregation mode", choices=["avg", "stack", "pad"], required=True)
+    parser.add_argument("--encode_mode", help="Encoding mode", choices=["ae", "rnn-ae", "vae", "rnn-vae"], required=True)
     parser.add_argument("--num_generations", help="Maximum number of generations", type=int, default=1000)
     parser.add_argument("--sigma", help="Mutation rate", type=float, default=0.5)
     parser.add_argument('--num_epochs', type=int, help='Number of epochs for auto encoder training', default=10)
