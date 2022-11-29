@@ -99,6 +99,12 @@ class VecRnnAE(nn.Module):
                 data_packed = torch.nn.utils.rnn.pack_padded_sequence(data, data_lengths, batch_first=True,
                                                                       enforce_sorted=False)
                 data_unpacked, _ = torch.nn.utils.rnn.pad_packed_sequence(data_packed, batch_first=True)
+                # mask data and outputs
+                mask = torch.stack(
+                    [F.pad(torch.ones(x), (0, data_lengths.max().item() - x), 'constant', 0).repeat(8, 1) for x in
+                     data_lengths]).transpose(1, 2).to(device)
+                outputs = outputs * mask
+                data_unpacked = data_unpacked * mask
                 # compute reconstruction loss
                 batch_loss = criterion(outputs, data_unpacked)
                 # reset the gradients back to zero
