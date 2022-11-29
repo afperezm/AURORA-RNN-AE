@@ -171,8 +171,10 @@ def main():
         data = data.to(DEVICE)
         hidden1, hidden2 = model.init_hidden(len(data))
         z = model.encode(data, data_lengths, hidden1)
-        print(z)
-        bcs_list.extend(z.tolist())
+        z = z.view(len(data), -1, n_lat)
+        for idx, data_length in enumerate(data_lengths):
+            print(z[idx, data_length - 1, :].shape)
+            bcs_list.append(z[idx, data_length - 1, :].detach().cpu().numpy())
 
     np.save('bcs_rnn-ae.npy', np.array(bcs_list))
 
