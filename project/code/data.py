@@ -76,7 +76,7 @@ def generate_test_data():
 
     env_seed = 1339
 
-    df = pandas.read_pickle("../../results_stochastic/MAP-ELITES_LUNDAR-LANDER_221118-031234/archive_1000.pkl")
+    df = pandas.read_pickle("../../results_stochastic/MAP-ELITES_LUNAR-LANDER_221118-031234/archive_1000.pkl")
 
     # archive = GridArchive(
     #     [50, 50],
