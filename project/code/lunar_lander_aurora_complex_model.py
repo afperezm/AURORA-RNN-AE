@@ -242,7 +242,7 @@ def main():
     log_freq = PARAMS.log_freq
     seed = PARAMS.seed
 
-    exp_name = f"AURORA-{train_mode}_{time_mode}-{encode_mode}_LUNAR-LANDER_{time.strftime('%y%m%d')}-{time.strftime('%H%M%S')}"
+    exp_name = f"AURORA-{train_mode}-{time_mode}-{encode_mode}_LUNAR-LANDER_{time.strftime('%y%m%d')}-{time.strftime('%H%M%S')}"
 
     # Create experiment directory
     if not os.path.exists(os.path.join(output_dir, exp_name)):
