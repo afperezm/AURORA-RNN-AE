@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from project.code.ae import VecAE, VecDataset
-from project.code.data import MinMaxPaddedScaler, MAX_LENGTH
+from project.code.data import MinMaxPaddedScaler, MAX_LENGTH, VecSeqDataset
 from project.code.networks import PolicyNet
 # from project.code.rnn import VecRnnAE, VecRnnVAE
 from project.code.rnn import VecRnnAE
@@ -147,7 +147,11 @@ def train_ae(model, scaler, states, num_epochs, batch_size, learning_rate, ckpt_
     states_scaled = scaler.fit_transform(states)
 
     # Load data set
-    dataset = VecDataset(states_scaled)
+    if len(states_scaled.shape) == 3:
+        states_lengths = np.array([s.shape[0] for s in states])
+        dataset = VecSeqDataset(states_scaled, states_lengths)
+    else:
+        dataset = VecDataset(states_scaled)
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
 
     # Train Model
@@ -195,16 +199,31 @@ def compute_behavior_descriptors(model, scaler, states_list, batch_size):
     states_array = scaler.transform(states_list)
 
     # Load data set
-    dataset = VecDataset(states_array)
+    if len(states_array.shape) == 3:
+        states_lengths = np.array([s.shape[0] for s in states_list])
+        dataset = VecSeqDataset(states_array, states_lengths)
+    else:
+        dataset = VecDataset(states_array)
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1)
 
     model.eval()
 
     bcs_list = []
-    for data in data_loader:
-        data = data.to(device)
-        z = model.encode(data).squeeze().detach().cpu().numpy()
-        bcs_list.extend(z.tolist())
+
+    if len(states_array.shape) == 3:
+        for data, data_lengths in data_loader:
+            data = data.to(device)
+            hidden1, hidden2 = model.init_hidden(len(data))
+            z = model.encode(data, data_lengths, hidden1)
+            # Pick hidden state of last element in sequence according to sequence length
+            z = z.view(len(data), -1, 2)
+            for idx, data_length in enumerate(data_lengths):
+                bcs_list.append(z[idx, data_length - 1, :].tolist())
+    else:
+        for data in data_loader:
+            data = data.to(device)
+            z = model.encode(data).squeeze().detach().cpu().numpy()
+            bcs_list.extend(z.tolist())
 
     return bcs_list
 
